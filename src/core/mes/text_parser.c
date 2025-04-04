@@ -104,39 +104,50 @@ typedef vector_t(char*) line_list;
 
 static bool read_lines(FILE *f, line_list *out)
 {
-	line_list lines = vector_initializer;
+    line_list lines = vector_initializer;
+    bool error = false;
 
-	errno = 0;
-	while (true) {
-		size_t _n;
-		char *line = NULL;
-		ssize_t size = getline(&line, &_n, f);
-		if (size <= 0) {
-			free(line);
-			break;
-		}
+    const size_t BUF_SIZE = 1024;
+    char buffer[BUF_SIZE];
 
-		// remove newline
-		if (line[size-1] == '\n') {
-			size--;
-			line[size] = '\0';
-		}
+    errno = 0;
 
-		vector_push(char*, lines, line);
-	}
+    while (1) {
+        if (!fgets(buffer, BUF_SIZE, f)) {
+            if (ferror(f)) {
+                error = true;
+            }
+            break;
+        }
 
-	// handle read error
-	if (errno) {
-		char *p;
-		vector_foreach(p, lines) {
-			free(p);
-		}
-		vector_destroy(lines);
-		return false;
-	}
+        size_t len = strlen(buffer);
+        if (len > 0 && buffer[len - 1] == '\n') {
+            buffer[len - 1] = '\0';
+            len--;
+        }
 
-	*out = lines;
-	return true;
+        char *line = malloc(len + 1);
+        if (!line) {
+            // 分配失败
+            error = true;
+            break;
+        }
+        strcpy(line, buffer);
+
+        vector_push(char*, lines, line);
+    }
+
+    if (error || errno != 0) {
+        char *p;
+        vector_foreach(p, lines) {
+            free(p);
+        }
+        vector_destroy(lines);
+        return false;
+    }
+
+    *out = lines;
+    return true;
 }
 
 static inline bool expect_char(struct mes_text_sub_state *state, char **str, char c)
